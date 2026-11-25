@@ -1,29 +1,63 @@
-// unsent-confession (Node 22, standard library only): writes the entry to /output/entry.txt.
-// Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
-//   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
-// Deterministic: no network, no randomness, no time or environment input.
+// Unsent: The Micro-Confession Sprint — a To: line plus the unsent line.
+//
+// Both parts are fixed strings written at authoring time. The program only
+// joins them, checks the result against the gates, and writes it out.
+// Deterministic: no network, no clock, no randomness, no file reads.
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+// Gate: whole file 1..260 characters; judge brief: message line at most 200.
+const TOTAL_LIMIT = 260;
+const MESSAGE_LIMIT = 200;
 
-const ENTRY_TEXT = "To: Dad\nI still have the voicemail where you said you were proud of me, and I play it every time I almost quit.";
+const ADDRESSEE = "my old piano teacher";
+const UNSENT_LINE =
+  "I still practice the piece you said I'd never finish, and every time I nail the hard part I wish you were in the room to hear it.";
 
-const MAX_CHARS = 260;
-
-function failGate(detail: string): never {
-  throw new Error(`gate failed: ${detail}`);
+function buildEntry(): string {
+  return `To: ${ADDRESSEE}\n${UNSENT_LINE}`;
 }
 
-function validateEntry(text: string): string {
-  if (text.trim().length === 0) failGate('entry must not be empty or only whitespace');
-  const chars = [...text].length;
-  if (chars < 1 || chars > MAX_CHARS) failGate(`entry must be 1-${MAX_CHARS} characters, got ${chars}`);
-  if (text !== text.trimEnd()) failGate('entry must not end with trailing whitespace');
-  return text + '\n';
+function fail(reason: string): never {
+  throw new Error(`invalid confession: ${reason}`);
 }
 
-const ENTRY = validateEntry(ENTRY_TEXT);
+function checkConfession(entry: string): void {
+  const total = [...entry].length;
+  if (total < 1) fail("entry is empty");
+  if (total > TOTAL_LIMIT) {
+    fail(`entry is ${total} characters, over the ${TOTAL_LIMIT} limit`);
+  }
+  const parts = entry.split("\n");
+  if (parts.length !== 2) {
+    fail(`entry must have exactly two lines, found ${parts.length}`);
+  }
+  const [toLine, message] = parts;
+  if (!toLine.startsWith("To: ") || toLine.trim() === "To:") {
+    fail("first line must name an addressee after 'To: '");
+  }
+  if ([...message].length > MESSAGE_LIMIT) {
+    fail(`message line is ${[...message].length} characters, over ${MESSAGE_LIMIT}`);
+  }
+  if (message.trim() === "") fail("message line is blank");
+  for (const line of parts) {
+    if (line !== line.trim()) {
+      fail("a line has leading or trailing whitespace");
+    }
+    if (line.includes("\t")) {
+      fail("a line contains a tab character");
+    }
+  }
+  if (entry.endsWith("\n")) {
+    fail("entry must not end with a newline");
+  }
+}
 
-const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+const entry = buildEntry();
+checkConfession(entry);
+const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
 mkdirSync(outDir, { recursive: true });
-writeFileSync(join(outDir, 'entry.txt'), ENTRY, 'utf8');
+writeFileSync(join(outDir, "entry.txt"), entry, "utf8");
+console.log(
+  `wrote ${[...entry].length}-character confession to ${join(outDir, "entry.txt")}`,
+);
